@@ -9,5 +9,5 @@ To run the test:
 3. monitor network traffic on gw1 and gw2 instances (gcp web console should be fine)
 
 ## References
-https://cloud.google.com/load-balancing/docs/internal/setting-up-ilb-next-hop#gcloud_2
-https://cloud.google.com/load-balancing/docs/internal/ilb-next-hop-overview#ilb-nh-multi-nic
+- https://cloud.google.com/load-balancing/docs/internal/setting-up-ilb-next-hop#gcloud_2
+- https://cloud.google.com/load-balancing/docs/internal/ilb-next-hop-overview#ilb-nh-multi-nic
