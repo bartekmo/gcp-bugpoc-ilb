@@ -54,6 +54,8 @@ resources:
           apt install iperf iperf3 -y
           {%- if loop.index0 == 1 %}
           iperf -sD
+          {%- else %}
+          iperf -P 20 -t 600 -c $(ref.{{prefix}}-{{sides[1]}}-vm.networkInterfaces[0].networkIP)
           {% endif %}
 
 {# routes #}
