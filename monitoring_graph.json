@@ -1,0 +1,35 @@
+{
+  "constantLines": [],
+  "dataSets": [
+    {
+      "plotType": "LINE",
+      "targetAxis": "Y1",
+      "timeSeriesFilter": {
+        "aggregations": [
+          {
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "resource.label.\"backend_name\""
+            ],
+            "perSeriesAligner": "ALIGN_RATE"
+          },
+          {
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupByFields": []
+          }
+        ],
+        "filter": "metric.type=\"loadbalancing.googleapis.com/l3/internal/ingress_bytes_count\" resource.type=\"internal_tcp_lb_rule\" resource.label.\"load_balancer_name\"=\"PREFIX-client-gwpool\"",
+        "minAlignmentPeriod": "60s",
+        "unitOverride": "By"
+      }
+    }
+  ],
+  "options": {
+    "mode": "COLOR"
+  },
+  "timeshiftDuration": "0s",
+  "y1Axis": {
+    "label": "y1Axis",
+    "scale": "LINEAR"
+  }
+}
