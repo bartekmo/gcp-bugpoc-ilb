@@ -1,0 +1,134 @@
+{% set region=properties.zones[0].split('-')[0]~'-'~properties.zones[0].split('-')[1] %}
+{% set sides=['client','server'] %}
+{% set prefix=properties.prefix | default(env.deployment)%}
+
+
+resources:
+{% for net in sides %}
+- name: {{prefix}}-{{net}}-vpc
+  type: compute.v1.network
+  properties:
+    autoCreateSubnetworks: false
+- name: {{prefix}}-{{net}}-subnet
+  type: compute.v1.subnetwork
+  properties:
+    region: {{region}}
+    network: $(ref.{{prefix}}-{{net}}-vpc.selfLink)
+    ipCidrRange: {{properties.cidrs[ loop.index0 ]}}
+
+{# allow all traffic. it's a poc for ILBs - we don't worry about security #}
+- name: {{prefix}}-{{net}}-fw-allowall
+  type: compute.v1.firewall
+  properties:
+    network: $(ref.{{prefix}}-{{net}}-vpc.selfLink)
+    priority: 100
+    allowed:
+    - IPProtocol: all
+
+{# create client and server VMs to initiate and terminate connections #}
+- name: {{prefix}}-{{net}}-vm
+  type: compute.v1.instance
+  properties:
+    region: {{ region }}
+    zone: {{ properties.zones[0] }}
+    machineType: zones/{{ properties.zones[0] }}/machineTypes/e2-micro
+    disks:
+    - deviceName: {{prefix}}-{{net}}vm-disk
+      boot: true
+      autoDelete: true
+      diskSizeGb: 10
+      initializeParams:
+        sourceImage: https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/family/ubuntu-2004-lts
+    networkInterfaces:
+    - network: $(ref.{{ prefix }}-{{ net }}-vpc.selfLink)
+      subnetwork: $(ref.{{ prefix }}-{{ net }}-subnet.selfLink)
+      accessConfigs:
+      - name: {{prefix}}-{{net}}vm-pip
+        type: ONE_TO_ONE_NAT
+    metadata:
+      items:
+      - key: startup-script
+        value: |
+          apt update
+          apt install nginx -y
+          apt install iperf iperf3 -y
+          {%- if loop.index0 == 1 %}
+          iperf -sD
+          {% endif %}
+
+{# routes #}
+- name: {{prefix}}-{{net}}-customroute
+  type: compute.v1.route
+  properties:
+    destRange: {{ properties.cidrs[ loop.index%2 ]}}
+    network: $(ref.{{prefix}}-{{net}}-vpc.selfLink)
+    nextHopIlb: $(ref.{{ prefix }}-{{net}}-ilbrule.selfLink )
+
+- name: {{prefix}}-{{net}}-ilbrule
+  type: compute.v1.forwardingRule
+  properties:
+    region: {{ region }}
+    loadBalancingScheme: INTERNAL
+    IPProtocol: TCP
+    allPorts: true
+    backendService: $(ref.{{ prefix }}-{{ net }}-gwpool.selfLink)
+    network: $(ref.{{ prefix }}-{{ net }}-vpc.selfLink)
+    subnetwork: $(ref.{{ prefix }}-{{ net }}-subnet.selfLink)
+
+- name: {{ prefix }}-{{ net }}-gwpool
+  type: compute.v1.regionBackendService
+  properties:
+    region: {{ region }}
+    loadBalancingScheme: INTERNAL
+    network: $(ref.{{ prefix }}-{{ net }}-vpc.selfLink)
+    protocol: TCP
+    healthChecks:
+    - $(ref.{{ prefix }}-gw-probe.selfLink)
+    backends:
+    {% for zone in properties.zones %}
+    - group: $(ref.{{ prefix }}-gwgroup{{ loop.index0 }}.selfLink)
+    {% endfor %}
+{% endfor %} {# each network #}
+
+- name: {{ prefix }}-gw-probe
+  type: compute.v1.healthCheck
+  properties:
+    type: HTTP
+    httpHealthCheck:
+      port: 80
+      checkIntervalSec: 5
+      timeoutSec: 3
+      unhealthyThreshold: 2
+      healthyThreshold: 1
+
+{% for zone in properties.zones %}
+- name: {{ prefix }}-gwgroup{{ loop.index0 }}
+  type: compute.v1.instanceGroup
+  properties:
+    zone: {{ zone }}
+- name: {{ prefix }}-gwgroup{{ loop.index0 }}-add
+  action: gcp-types/compute-v1:compute.instanceGroups.addInstances
+  metadata:
+    runtimePolicy:
+    - CREATE
+  properties:
+    zone: {{ zone }}
+    instanceGroup: $(ref.{{ prefix }}-gwgroup{{ loop.index0 }}.name)
+    instances:
+    - instance: $(ref.{{ prefix }}-gw{{ loop.index }}.selfLink)
+{% endfor %}
+
+{% for indx in [1,2] %}
+- name: {{prefix}}-gw{{loop.index}}
+  type: gw.jinja
+  properties:
+    zone: {{ properties.zones[ loop.index0 ]}}
+    name: {{prefix}}-gw{{ loop.index }}
+    networks:
+    {% for net in sides %}
+    - name: {{net}}
+      vpcLink: $(ref.{{ prefix }}-{{ net }}-vpc.selfLink)
+      subnetLink: $(ref.{{ prefix }}-{{ net }}-subnet.selfLink)
+      cidr: {{ properties.cidrs[ loop.index0 ]}}
+    {% endfor %}
+{% endfor %}

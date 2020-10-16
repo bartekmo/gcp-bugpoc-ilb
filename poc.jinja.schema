@@ -1,0 +1,15 @@
+imports:
+- path: gw-debian9.jinja
+  name: gw.jinja
+
+properties:
+  zones:
+    type: array
+    default:
+    - europe-west1-b
+    - europe-west1-c
+  cidrs:
+    type: array
+    default:
+    - 172.16.0.0/24
+    - 172.16.1.0/24
